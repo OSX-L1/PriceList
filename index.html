@@ -49,7 +49,7 @@ const getFirebaseConfig = () => {
   }
   
   // ⚠️ ⚠️ ⚠️ สำคัญมาก: คุณต้องแทนที่ค่าด้านล่างด้วย Config จาก Firebase Project ของคุณเอง ⚠️ ⚠️ ⚠️
-  // หากยังไม่เปลี่ยนค่านี้ เวลา deploy ขึ้น Netlify หน้าเว็บจะ Error เพราะเชื่อมต่อฐานข้อมูลไม่ได้
+  // หากยังไม่เปลี่ยนค่านี้ เวลา deploy ขึ้น Netlify หน้าเว็บจะแสดงหน้าจอแจ้งเตือนให้ตั้งค่า
   return {
     apiKey: "YOUR_API_KEY_HERE",
     authDomain: "your-project-id.firebaseapp.com",
@@ -61,10 +61,10 @@ const getFirebaseConfig = () => {
 };
 
 const firebaseConfig = getFirebaseConfig();
-// Check for dummy config
-const isDummyConfig = firebaseConfig.apiKey === "YOUR_API_KEY_HERE";
+// ตรวจสอบว่าเป็น Config จำลองหรือไม่
+const isDummyConfig = !firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY_HERE";
 
-// Initialize only if config looks valid to prevent immediate crash
+// เริ่มต้นแอปเฉพาะเมื่อ Config ถูกต้องเพื่อป้องกันการ Crash
 const app = !isDummyConfig ? initializeApp(firebaseConfig) : null;
 const auth = app ? getAuth(app) : null;
 const db = app ? getFirestore(app) : null;
@@ -184,11 +184,9 @@ export default function App() {
     if (isDummyConfig || !auth) return; // Skip auth if config is invalid
 
     const initAuth = async () => {
-      // Check for environment specific auth first
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
-        // Fallback for Netlify/GitHub (Anonymous Auth)
         try {
           await signInAnonymously(auth);
         } catch (error) {
@@ -211,8 +209,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // If no valid config, use initial data directly (Offline mode/Setup mode)
     if (isDummyConfig) {
-        // Use dummy data immediately if config is missing
         setData(INITIAL_DATA);
         return;
     }
@@ -463,6 +461,9 @@ export default function App() {
             boxShadow: '0 20px 60px -15px rgba(0, 0, 0, 0.15)'
           }}
         >
+          {/* Decorations */}
+          {/* Sun Removed */}
+
           {/* Header */}
           <div className="text-center border-b-2 pb-6 mb-2 relative z-10" style={{ borderColor: data.theme.borderColor }}>
             {isEditing ? (
