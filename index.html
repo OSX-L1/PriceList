@@ -41,8 +41,6 @@ const Deco = {
 };
 
 // --- 🔴 ส่วนที่ต้องแก้ไขสำหรับ NETLIFY/GITHUB ---
-// ถ้าคุณรันบน Netlify ให้แทนที่ object ว่างๆ ด้านล่างด้วย Config จาก Firebase Console
-// หากรันในหน้าแชท AI จะใช้ __firebase_config อัตโนมัติ
 const getFirebaseConfig = () => {
   try {
     if (typeof __firebase_config !== 'undefined') {
@@ -52,7 +50,6 @@ const getFirebaseConfig = () => {
     console.warn("Using fallback config");
   }
   
-  // ⚠️ ใส่ Config ของคุณที่นี่ (copy จาก Firebase Console > Project Settings)
   return {
     apiKey: "YOUR_API_KEY_HERE",
     authDomain: "your-project.firebaseapp.com",
@@ -68,7 +65,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// ใช้ชื่อ App ID ตายตัวถ้าไม่มีตัวแปรระบบ (เพื่อให้ข้อมูลไม่หายเวลา deploy)
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'sunny-pricelist-app';
 
 // --- Initial Data ---
@@ -88,13 +84,13 @@ const INITIAL_DATA = {
     borderColor: "#EEEEEE"    
   },
 
-  // Premium Dark Colors
+  // Premium Dark Colors to make Gold Pop
   categories: [
     {
       id: 'cat_1',
       name: "ม่านปรับแสง (Vertical Blinds)",
       emoji: "🏠",
-      headerBg: "#1C2833", // Premium Dark Navy
+      headerBg: "#0F172A", // Midnight Blue (Darker)
       headerText: "#FFFFFF",
       isGradient: true, 
       items: [
@@ -107,7 +103,7 @@ const INITIAL_DATA = {
       id: 'cat_2',
       name: "ม่านม้วนกรองแสง (Sunscreen)",
       emoji: "☀️",
-      headerBg: "#3E2723", // Dark Cocoa / Coffee
+      headerBg: "#271A12", // Dark Espresso (Darker)
       headerText: "#FFFFFF",
       isGradient: true,
       items: [
@@ -122,7 +118,7 @@ const INITIAL_DATA = {
       id: 'cat_3',
       name: "ม่านม้วน (Roller Blinds)",
       emoji: "🪟",
-      headerBg: "#004D40", // Deep Teal / Emerald
+      headerBg: "#064E3B", // Dark Emerald (Darker)
       headerText: "#FFFFFF",
       isGradient: true,
       items: [
@@ -139,7 +135,7 @@ const INITIAL_DATA = {
       id: 'cat_4',
       name: "อุปกรณ์เสริม (Accessories)",
       emoji: "⚙️",
-      headerBg: "#263238", // Dark Blue Grey / Onyx
+      headerBg: "#18181B", // Charcoal Black (Darker)
       headerText: "#FFFFFF",
       isGradient: true,
       items: [
@@ -181,15 +177,13 @@ export default function App() {
   // --- Auth & Data Fetching ---
   useEffect(() => {
     const initAuth = async () => {
-      // Check for environment specific auth first
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
-        // Fallback for Netlify/GitHub (Anonymous Auth)
         try {
           await signInAnonymously(auth);
         } catch (error) {
-          console.error("Auth Error: Make sure Anonymous Auth is enabled in Firebase Console", error);
+          console.error("Auth Error", error);
         }
       }
     };
@@ -200,23 +194,15 @@ export default function App() {
 
   // --- Load html2canvas via CDN ---
   useEffect(() => {
-    // Check if already loaded
     if (window.html2canvas) return;
-    
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
     script.async = true;
     document.body.appendChild(script);
-
-    return () => {
-      // Optional cleanup
-      // document.body.removeChild(script); 
-    }
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    // Use a fixed path if not in the specific environment
     const userId = user.uid;
     const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'pricelist_v5');
     
@@ -231,7 +217,6 @@ export default function App() {
       }
     }, (error) => {
         console.error("Firestore Error:", error);
-        // Fallback to local data if DB fails (e.g. permission issues)
         setData(INITIAL_DATA);
     });
     return () => unsub();
@@ -537,12 +522,12 @@ export default function App() {
                       <>
                         <span className="text-2xl filter drop-shadow-md">{cat.emoji}</span>
                         <span 
-                          className="tracking-wide text-shadow-sm"
+                          className="tracking-wide"
                           style={cat.isGradient ? {
                             background: "linear-gradient(to right, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)",
                             WebkitBackgroundClip: "text",
                             WebkitTextFillColor: "transparent",
-                            filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.8))" // Increased shadow for contrast
+                            filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.8))" // Shadow for contrast
                           } : {
                             color: cat.headerText
                           }}
