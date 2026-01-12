@@ -43,6 +43,7 @@ const Deco = {
 // --- 🔴 ส่วนที่ต้องแก้ไขสำหรับ NETLIFY/GITHUB ---
 const getFirebaseConfig = () => {
   try {
+    // พยายามใช้ Config ของ Canvas ถ้ามี
     if (typeof __firebase_config !== 'undefined') {
       return JSON.parse(__firebase_config);
     }
@@ -50,13 +51,15 @@ const getFirebaseConfig = () => {
     console.warn("Using fallback config");
   }
   
+  // ⚠️ ⚠️ ⚠️ สำคัญมาก: คุณต้องแทนที่ค่าด้านล่างด้วย Config จาก Firebase Project ของคุณเอง ⚠️ ⚠️ ⚠️
+  // วิธีหา: ไปที่ console.firebase.google.com > Project Settings > General > Your apps > SDK setup and configuration
   return {
     apiKey: "YOUR_API_KEY_HERE",
-    authDomain: "your-project.firebaseapp.com",
+    authDomain: "your-project-id.firebaseapp.com",
     projectId: "your-project-id",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef"
+    storageBucket: "your-project-id.appspot.com",
+    messagingSenderId: "1234567890",
+    appId: "1:1234567890:web:abcdef123456"
   };
 };
 
@@ -65,7 +68,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'sunny-pricelist-app';
+// ใช้ ID เริ่มต้นหากไม่มีการส่งค่ามา
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'sunny-pricelist-production';
 
 // --- Initial Data ---
 const INITIAL_DATA = {
@@ -177,13 +181,15 @@ export default function App() {
   // --- Auth & Data Fetching ---
   useEffect(() => {
     const initAuth = async () => {
+      // Check for environment specific auth first
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
+        // Fallback for Netlify/GitHub (Anonymous Auth)
         try {
           await signInAnonymously(auth);
         } catch (error) {
-          console.error("Auth Error", error);
+          console.error("Auth Error: Make sure Anonymous Auth is enabled in Firebase Console", error);
         }
       }
     };
@@ -203,8 +209,14 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
+    
+    // Check if we are in the canvas environment to determine the correct path
+    // In production (Netlify), we might want a simpler path or different logic.
+    // Here we use a safe fallback if appId is the default placeholder.
     const userId = user.uid;
-    const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'pricelist_v5');
+    const currentAppId = appId; 
+    
+    const docRef = doc(db, 'artifacts', currentAppId, 'users', userId, 'data', 'pricelist_v5');
     
     const unsub = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -217,6 +229,7 @@ export default function App() {
       }
     }, (error) => {
         console.error("Firestore Error:", error);
+        // Fallback to local data if DB fails (e.g. permission issues or config issues)
         setData(INITIAL_DATA);
     });
     return () => unsub();
