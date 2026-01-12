@@ -25,11 +25,8 @@ const Icons = {
   Sparkles: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 0L14.59 5.41L20 8L14.59 10.59L12 16L9.41 10.59L4 8L9.41 5.41L12 0Z"/></svg>
 };
 
-// --- Decorative SVGs ---
+// --- Decorative SVGs (Sun Removed) ---
 const Deco = {
-  Sun: () => (
-    <svg className="absolute -top-20 -right-20 w-64 h-64 text-orange-400 opacity-10 pointer-events-none" viewBox="0 0 100 100" fill="currentColor"><circle cx="50" cy="50" r="20"/><path d="M50 10v10m0 60v10M10 50h10m60 0h10m-14.1-35.9l7.1 7.1M27 73l7.1-7.1M27 27l7.1 7.1M73 73l-7.1-7.1" stroke="currentColor" strokeWidth="5" strokeLinecap="round"/></svg>
-  ),
   Pattern: () => (
     <svg className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none" width="100%" height="100%">
       <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -52,7 +49,7 @@ const getFirebaseConfig = () => {
   }
   
   // ⚠️ ⚠️ ⚠️ สำคัญมาก: คุณต้องแทนที่ค่าด้านล่างด้วย Config จาก Firebase Project ของคุณเอง ⚠️ ⚠️ ⚠️
-  // วิธีหา: ไปที่ console.firebase.google.com > Project Settings > General > Your apps > SDK setup and configuration
+  // หากยังไม่เปลี่ยนค่านี้ เวลา deploy ขึ้น Netlify หน้าเว็บจะ Error เพราะเชื่อมต่อฐานข้อมูลไม่ได้
   return {
     apiKey: "YOUR_API_KEY_HERE",
     authDomain: "your-project-id.firebaseapp.com",
@@ -64,9 +61,13 @@ const getFirebaseConfig = () => {
 };
 
 const firebaseConfig = getFirebaseConfig();
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// Check for dummy config
+const isDummyConfig = firebaseConfig.apiKey === "YOUR_API_KEY_HERE";
+
+// Initialize only if config looks valid to prevent immediate crash
+const app = !isDummyConfig ? initializeApp(firebaseConfig) : null;
+const auth = app ? getAuth(app) : null;
+const db = app ? getFirestore(app) : null;
 
 // ใช้ ID เริ่มต้นหากไม่มีการส่งค่ามา
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'sunny-pricelist-production';
@@ -88,7 +89,7 @@ const INITIAL_DATA = {
     borderColor: "#EEEEEE"    
   },
 
-  // Premium Dark Colors to make Gold Pop
+  // Premium Dark Colors
   categories: [
     {
       id: 'cat_1',
@@ -180,6 +181,8 @@ export default function App() {
 
   // --- Auth & Data Fetching ---
   useEffect(() => {
+    if (isDummyConfig || !auth) return; // Skip auth if config is invalid
+
     const initAuth = async () => {
       // Check for environment specific auth first
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -189,7 +192,7 @@ export default function App() {
         try {
           await signInAnonymously(auth);
         } catch (error) {
-          console.error("Auth Error: Make sure Anonymous Auth is enabled in Firebase Console", error);
+          console.error("Auth Error:", error);
         }
       }
     };
@@ -208,11 +211,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (isDummyConfig) {
+        // Use dummy data immediately if config is missing
+        setData(INITIAL_DATA);
+        return;
+    }
+
+    if (!user || !db) return;
     
-    // Check if we are in the canvas environment to determine the correct path
-    // In production (Netlify), we might want a simpler path or different logic.
-    // Here we use a safe fallback if appId is the default placeholder.
     const userId = user.uid;
     const currentAppId = appId; 
     
@@ -229,15 +235,15 @@ export default function App() {
       }
     }, (error) => {
         console.error("Firestore Error:", error);
-        // Fallback to local data if DB fails (e.g. permission issues or config issues)
+        // Fallback to local data if DB fails
         setData(INITIAL_DATA);
     });
     return () => unsub();
   }, [user]);
 
   const handleUpdate = async (newData) => {
-    if (!user) return;
     setData(newData);
+    if (!user || !db) return;
     try {
         const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pricelist_v5');
         await setDoc(docRef, newData);
@@ -338,6 +344,31 @@ export default function App() {
     }
   };
 
+  // --- SHOW SETUP SCREEN IF ON NETLIFY WITHOUT CONFIG ---
+  if (isDummyConfig) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-800 font-prompt p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center border-t-8 border-red-500">
+          <div className="mb-4 text-red-500 flex justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h1 className="text-2xl font-bold mb-4 text-gray-900">⚠️ ต้องตั้งค่า Firebase ก่อนใช้งาน</h1>
+          <p className="mb-6 text-gray-600 leading-relaxed">
+            ดูเหมือนว่าคุณกำลังใช้งานเว็บนี้บน Netlify หรือ GitHub Pages แต่ยังไม่ได้เปลี่ยนค่า <code>Firebase Config</code> เป็นของคุณเอง
+          </p>
+          <div className="bg-gray-50 p-4 rounded-lg text-left text-sm font-mono border mb-6 overflow-x-auto">
+            <p className="text-gray-500 mb-2">// ค้นหาบรรทัดนี้ในไฟล์ sunny1988_editor.jsx</p>
+            <p><span className="text-purple-600">apiKey</span>: <span className="text-green-600">"YOUR_API_KEY_HERE"</span>,</p>
+            <p className="text-gray-400 mt-2">// และแทนที่ด้วยค่าจาก Firebase Console ของคุณ</p>
+          </div>
+          <button onClick={() => window.location.reload()} className="px-6 py-3 bg-red-600 text-white rounded-full font-bold hover:bg-red-700 transition shadow-lg">
+            รีโหลดหน้าเว็บ
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!data) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 font-prompt">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mr-2"></div>
@@ -432,9 +463,6 @@ export default function App() {
             boxShadow: '0 20px 60px -15px rgba(0, 0, 0, 0.15)'
           }}
         >
-          {/* Decorations */}
-          <Deco.Sun />
-
           {/* Header */}
           <div className="text-center border-b-2 pb-6 mb-2 relative z-10" style={{ borderColor: data.theme.borderColor }}>
             {isEditing ? (
