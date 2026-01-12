@@ -40,12 +40,36 @@ const Deco = {
   )
 };
 
-// --- Firebase ---
-const firebaseConfig = JSON.parse(__firebase_config);
+// --- 🔴 ส่วนที่ต้องแก้ไขสำหรับ NETLIFY/GITHUB ---
+// ถ้าคุณรันบน Netlify ให้แทนที่ object ว่างๆ ด้านล่างด้วย Config จาก Firebase Console
+// หากรันในหน้าแชท AI จะใช้ __firebase_config อัตโนมัติ
+const getFirebaseConfig = () => {
+  try {
+    if (typeof __firebase_config !== 'undefined') {
+      return JSON.parse(__firebase_config);
+    }
+  } catch (e) {
+    console.warn("Using fallback config");
+  }
+  
+  // ⚠️ ใส่ Config ของคุณที่นี่ (copy จาก Firebase Console > Project Settings)
+  return {
+    apiKey: "YOUR_API_KEY_HERE",
+    authDomain: "your-project.firebaseapp.com",
+    projectId: "your-project-id",
+    storageBucket: "your-project.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef"
+  };
+};
+
+const firebaseConfig = getFirebaseConfig();
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// ใช้ชื่อ App ID ตายตัวถ้าไม่มีตัวแปรระบบ (เพื่อให้ข้อมูลไม่หายเวลา deploy)
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'sunny-pricelist-app';
 
 // --- Initial Data ---
 const INITIAL_DATA = {
@@ -64,7 +88,7 @@ const INITIAL_DATA = {
     borderColor: "#EEEEEE"    
   },
 
-  // Updated to Dark Premium Colors to match Gold Text
+  // Premium Dark Colors
   categories: [
     {
       id: 'cat_1',
@@ -72,7 +96,7 @@ const INITIAL_DATA = {
       emoji: "🏠",
       headerBg: "#1C2833", // Premium Dark Navy
       headerText: "#FFFFFF",
-      isGradient: true, // Default effect ON
+      isGradient: true, 
       items: [
         { id: 'item_1_1', series: "AUROSUN", detail: "BLACKOUT 100%", code: "A5-000X", price: "399", unit: "/หลา" },
         { id: 'item_1_2', series: "BOUVI", detail: "BLACKOUT 100%", code: "SZH-002X", price: "399", unit: "/หลา" },
@@ -154,20 +178,19 @@ export default function App() {
   const [showThemePanel, setShowThemePanel] = useState(false);
   const captureRef = useRef(null);
 
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-    script.async = true;
-    document.body.appendChild(script);
-    return () => { document.body.removeChild(script); }
-  }, []);
-
+  // --- Auth & Data Fetching ---
   useEffect(() => {
     const initAuth = async () => {
+      // Check for environment specific auth first
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
-        await signInAnonymously(auth);
+        // Fallback for Netlify/GitHub (Anonymous Auth)
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error("Auth Error: Make sure Anonymous Auth is enabled in Firebase Console", error);
+        }
       }
     };
     initAuth();
@@ -175,9 +198,28 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- Load html2canvas via CDN ---
+  useEffect(() => {
+    // Check if already loaded
+    if (window.html2canvas) return;
+    
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      // Optional cleanup
+      // document.body.removeChild(script); 
+    }
+  }, []);
+
   useEffect(() => {
     if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pricelist_v5');
+    // Use a fixed path if not in the specific environment
+    const userId = user.uid;
+    const docRef = doc(db, 'artifacts', appId, 'users', userId, 'data', 'pricelist_v5');
+    
     const unsub = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const remoteData = snapshot.data();
@@ -187,6 +229,10 @@ export default function App() {
         setDoc(docRef, INITIAL_DATA);
         setData(INITIAL_DATA);
       }
+    }, (error) => {
+        console.error("Firestore Error:", error);
+        // Fallback to local data if DB fails (e.g. permission issues)
+        setData(INITIAL_DATA);
     });
     return () => unsub();
   }, [user]);
@@ -194,8 +240,12 @@ export default function App() {
   const handleUpdate = async (newData) => {
     if (!user) return;
     setData(newData);
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pricelist_v5');
-    await setDoc(docRef, newData);
+    try {
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pricelist_v5');
+        await setDoc(docRef, newData);
+    } catch (e) {
+        console.error("Save Error:", e);
+    }
   };
 
   const handleFieldChange = (key, value) => {
@@ -261,7 +311,10 @@ export default function App() {
   };
 
   const downloadImage = async () => {
-    if (!captureRef.current || !window.html2canvas) return;
+    if (!captureRef.current || !window.html2canvas) {
+        alert("กำลังโหลดไลบรารี... กรุณาลองใหม่ใน 2-3 วินาที");
+        return;
+    }
     setIsSavingImg(true);
     setIsEditing(false);
     setShowThemePanel(false);
