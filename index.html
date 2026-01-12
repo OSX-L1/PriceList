@@ -1,0 +1,629 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged,
+  signInWithCustomToken
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  onSnapshot, 
+  setDoc
+} from 'firebase/firestore';
+
+// --- Icons ---
+const Icons = {
+  Edit: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Save: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+  Image: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
+  Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>,
+  Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  X: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Palette: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>,
+  Sparkles: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 0L14.59 5.41L20 8L14.59 10.59L12 16L9.41 10.59L4 8L9.41 5.41L12 0Z"/></svg>
+};
+
+// --- Decorative SVGs ---
+const Deco = {
+  Sun: () => (
+    <svg className="absolute -top-20 -right-20 w-64 h-64 text-orange-400 opacity-10 pointer-events-none" viewBox="0 0 100 100" fill="currentColor"><circle cx="50" cy="50" r="20"/><path d="M50 10v10m0 60v10M10 50h10m60 0h10m-14.1-35.9l7.1 7.1M27 73l7.1-7.1M27 27l7.1 7.1M73 73l-7.1-7.1" stroke="currentColor" strokeWidth="5" strokeLinecap="round"/></svg>
+  ),
+  Pattern: () => (
+    <svg className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none" width="100%" height="100%">
+      <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1"/>
+      </pattern>
+      <rect width="100%" height="100%" fill="url(#grid)" />
+    </svg>
+  )
+};
+
+// --- Firebase ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- Initial Data ---
+const INITIAL_DATA = {
+  logoUrl: "", 
+  companyName: "Sunny 1988",
+  subTitle: "รายการราคาสินค้าผ้าม่านและอุปกรณ์",
+  footerText: "* ราคาอาจมีการเปลี่ยนแปลง โปรดสอบถามฝ่ายขายเพื่อความถูกต้อง *",
+  
+  // Theme Settings
+  theme: {
+    bgColor: "#F5F5F7",       
+    sheetColor: "#FFFFFF",    
+    primaryText: "#212121",   
+    secondaryText: "#555555", 
+    priceColor: "#D32F2F",    
+    borderColor: "#EEEEEE"    
+  },
+
+  // Updated to Premium Colors with Gradient support
+  categories: [
+    {
+      id: 'cat_1',
+      name: "ม่านปรับแสง (Vertical Blinds)",
+      emoji: "🏠",
+      headerBg: "#2C3E50", 
+      headerText: "#FFFFFF",
+      isGradient: true, // Default effect ON
+      items: [
+        { id: 'item_1_1', series: "AUROSUN", detail: "BLACKOUT 100%", code: "A5-000X", price: "399", unit: "/หลา" },
+        { id: 'item_1_2', series: "BOUVI", detail: "BLACKOUT 100%", code: "SZH-002X", price: "399", unit: "/หลา" },
+        { id: 'item_1_3', series: "KOALA NOVA", detail: "BLACKOUT 100%", code: "RBP", price: "365", unit: "/หลา" },
+      ]
+    },
+    {
+      id: 'cat_2',
+      name: "ม่านม้วนกรองแสง (Sunscreen)",
+      emoji: "☀️",
+      headerBg: "#E67E22",
+      headerText: "#FFFFFF",
+      isGradient: true,
+      items: [
+        { id: 'item_2_1', series: "LUMI 1%", detail: "Openness 1%", code: "RSP 1XX", price: "349", unit: "/หลา" },
+        { id: 'item_2_2', series: "LUMI 3%", detail: "Openness 3%", code: "RSP 3XX", price: "280", unit: "/หลา" },
+        { id: 'item_2_3', series: "LUMI 5%", detail: "Openness 5%", code: "RSP 5XX", price: "280", unit: "/หลา" },
+        { id: 'item_2_4', series: "NUVETTE", detail: "Openness 3%", code: "RSCJ6XX", price: "329", unit: "/หลา" },
+        { id: 'item_2_5', series: "SHADIRA", detail: "Openness 5%", code: "RSM 88X", price: "299", unit: "/หลา" },
+      ]
+    },
+    {
+      id: 'cat_3',
+      name: "ม่านม้วน (Roller Blinds)",
+      emoji: "🪟",
+      headerBg: "#00695C", 
+      headerText: "#FFFFFF",
+      isGradient: true,
+      items: [
+        { id: 'item_3_1', series: "ARISO", detail: "DIMOUT", code: "MED-006X", price: "349", unit: "/หลา" },
+        { id: 'item_3_2', series: "AUROSUN", detail: "BLACKOUT 100%", code: "A5-000X", price: "399", unit: "/หลา" },
+        { id: 'item_3_3', series: "BOUVI", detail: "BLACKOUT 100%", code: "SZH-002X", price: "369", unit: "/หลา" },
+        { id: 'item_3_4', series: "KOALA NOVA", detail: "BLACKOUT 100%", code: "RBP", price: "260", unit: "/หลา" },
+        { id: 'item_3_5', series: "SHEERO", detail: "DIMOUT", code: "TM-51XX", price: "290", unit: "/หลา" },
+        { id: 'item_3_6', series: "SOLIX", detail: "DIMOUT", code: "TML-516X", price: "290", unit: "/หลา" },
+        { id: 'item_3_7', series: "VAALRIE", detail: "BLACKOUT 100%", code: "VAL", price: "399", unit: "/หลา" },
+      ]
+    },
+    {
+      id: 'cat_4',
+      name: "อุปกรณ์เสริม (Accessories)",
+      emoji: "⚙️",
+      headerBg: "#455A64", 
+      headerText: "#FFFFFF",
+      isGradient: true,
+      items: [
+        { id: 'item_4_1', series: "มอเตอร์ รุ่น L", detail: "สำหรับม่านขนาดใหญ่", code: "L", price: "4,999", unit: "/ชุด" },
+        { id: 'item_4_2', series: "มอเตอร์ รุ่น S", detail: "สำหรับม่านขนาดเล็ก", code: "S", price: "2,999", unit: "/ชุด" },
+      ]
+    }
+  ]
+};
+
+const ColorPicker = ({ label, value, onChange }) => (
+  <div className="flex flex-col gap-1">
+    <label className="text-xs font-semibold text-gray-500">{label}</label>
+    <div className="flex items-center gap-2">
+      <input 
+        type="color" 
+        value={value} 
+        onChange={(e) => onChange(e.target.value)}
+        className="w-8 h-8 rounded cursor-pointer border-0 p-0 shadow-sm ring-1 ring-gray-200"
+      />
+      <input 
+        type="text" 
+        value={value} 
+        onChange={(e) => onChange(e.target.value)}
+        className="w-20 text-xs border rounded px-1 py-1 bg-gray-50 uppercase font-mono"
+      />
+    </div>
+  </div>
+);
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [data, setData] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSavingImg, setIsSavingImg] = useState(false);
+  const [showThemePanel, setShowThemePanel] = useState(false);
+  const captureRef = useRef(null);
+
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => { document.body.removeChild(script); }
+  }, []);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pricelist_v5');
+    const unsub = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const remoteData = snapshot.data();
+        if (!remoteData.theme) remoteData.theme = INITIAL_DATA.theme;
+        setData(remoteData);
+      } else {
+        setDoc(docRef, INITIAL_DATA);
+        setData(INITIAL_DATA);
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  const handleUpdate = async (newData) => {
+    if (!user) return;
+    setData(newData);
+    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'pricelist_v5');
+    await setDoc(docRef, newData);
+  };
+
+  const handleFieldChange = (key, value) => {
+    handleUpdate({ ...data, [key]: value });
+  };
+
+  const handleThemeChange = (key, value) => {
+    handleUpdate({ 
+      ...data, 
+      theme: { ...data.theme, [key]: value } 
+    });
+  };
+
+  const updateCategory = (catIndex, field, value) => {
+    const newCats = [...data.categories];
+    newCats[catIndex][field] = value;
+    handleUpdate({ ...data, categories: newCats });
+  };
+
+  const updateItem = (catIndex, itemIndex, field, value) => {
+    const newCats = [...data.categories];
+    newCats[catIndex].items[itemIndex][field] = value;
+    handleUpdate({ ...data, categories: newCats });
+  };
+
+  const addCategory = () => {
+    const newCats = [...data.categories, {
+      id: `cat_${Date.now()}`,
+      name: "หมวดหมู่ใหม่",
+      emoji: "📦",
+      headerBg: "#333333",
+      headerText: "#FFFFFF",
+      isGradient: false,
+      items: []
+    }];
+    handleUpdate({ ...data, categories: newCats });
+  };
+
+  const removeCategory = (index) => {
+    if(!confirm('ยืนยันลบหมวดหมู่นี้?')) return;
+    const newCats = [...data.categories];
+    newCats.splice(index, 1);
+    handleUpdate({ ...data, categories: newCats });
+  };
+
+  const addItem = (catIndex) => {
+    const newCats = [...data.categories];
+    newCats[catIndex].items.push({
+      id: `item_${Date.now()}`,
+      series: "New Series",
+      detail: "-",
+      code: "CODE",
+      price: "0",
+      unit: "/หลา"
+    });
+    handleUpdate({ ...data, categories: newCats });
+  };
+
+  const removeItem = (catIndex, itemIndex) => {
+    const newCats = [...data.categories];
+    newCats[catIndex].items.splice(itemIndex, 1);
+    handleUpdate({ ...data, categories: newCats });
+  };
+
+  const downloadImage = async () => {
+    if (!captureRef.current || !window.html2canvas) return;
+    setIsSavingImg(true);
+    setIsEditing(false);
+    setShowThemePanel(false);
+    await new Promise(r => setTimeout(r, 800));
+
+    try {
+      const canvas = await window.html2canvas(captureRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: null,
+        scrollY: -window.scrollY,
+        windowWidth: 1200,
+      });
+      const link = document.createElement('a');
+      link.download = `${data.companyName}_PriceList.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดในการบันทึกภาพ");
+    } finally {
+      setIsSavingImg(false);
+    }
+  };
+
+  if (!data) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 font-prompt">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mr-2"></div>
+      กำลังโหลดข้อมูล...
+    </div>
+  );
+
+  return (
+    <div 
+      className="min-h-screen py-8 font-prompt transition-colors duration-300 relative overflow-hidden"
+      style={{ backgroundColor: data.theme.bgColor, color: data.theme.primaryText }}
+    >
+      <Deco.Pattern />
+
+      {/* --- Control Bar --- */}
+      <div className="fixed top-4 right-4 z-50 flex gap-2 flex-wrap justify-end pl-4">
+        {isEditing && (
+          <button 
+            onClick={() => setShowThemePanel(!showThemePanel)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-lg transition-all font-semibold border ${
+              showThemePanel 
+                ? 'bg-purple-600 text-white border-purple-600' 
+                : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-200'
+            }`}
+          >
+            <Icons.Palette /> {showThemePanel ? 'ปิดแผงสี' : 'ปรับสี'}
+          </button>
+        )}
+
+        <button 
+          onClick={() => {
+            setIsEditing(!isEditing);
+            setShowThemePanel(false);
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-lg transition-all font-semibold ${
+            isEditing 
+              ? 'bg-blue-600 text-white hover:bg-blue-700' 
+              : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-200'
+          }`}
+        >
+          {isEditing ? <Icons.Save /> : <Icons.Edit />}
+          {isEditing ? 'เสร็จสิ้น' : 'แก้ไขข้อมูล'}
+        </button>
+
+        {!isEditing && (
+          <button 
+            onClick={downloadImage}
+            disabled={isSavingImg}
+            className="flex items-center gap-2 px-4 py-2 rounded-full shadow-lg bg-red-500 text-white hover:bg-red-600 transition-all font-semibold"
+          >
+            {isSavingImg ? (
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+            ) : (
+              <Icons.Image />
+            )}
+            บันทึกรูปภาพ
+          </button>
+        )}
+      </div>
+
+      {/* --- Theme Settings Panel --- */}
+      {isEditing && showThemePanel && (
+        <div className="fixed top-20 right-4 z-40 bg-white p-6 rounded-2xl shadow-2xl border w-80 max-h-[80vh] overflow-y-auto backdrop-blur-md bg-opacity-95">
+          <h3 className="font-bold text-lg mb-4 flex items-center gap-2 border-b pb-2">
+            <Icons.Palette /> ตั้งค่าสี (Theme)
+          </h3>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm text-gray-700">พื้นหลัง</h4>
+              <ColorPicker label="สีพื้นหลังเว็บ" value={data.theme.bgColor} onChange={(v) => handleThemeChange('bgColor', v)} />
+              <ColorPicker label="สีกระดาษ" value={data.theme.sheetColor} onChange={(v) => handleThemeChange('sheetColor', v)} />
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <h4 className="font-semibold text-sm text-gray-700">ข้อความ</h4>
+              <ColorPicker label="สีหัวข้อหลัก" value={data.theme.primaryText} onChange={(v) => handleThemeChange('primaryText', v)} />
+              <ColorPicker label="สีข้อความรอง" value={data.theme.secondaryText} onChange={(v) => handleThemeChange('secondaryText', v)} />
+              <ColorPicker label="สีราคา" value={data.theme.priceColor} onChange={(v) => handleThemeChange('priceColor', v)} />
+              <ColorPicker label="สีเส้นตาราง" value={data.theme.borderColor} onChange={(v) => handleThemeChange('borderColor', v)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- Main Document Sheet --- */}
+      <div className="flex justify-center px-4 relative z-10 pb-20">
+        <div 
+          ref={captureRef}
+          id="capture-area"
+          className="w-full max-w-[900px] rounded-[20px] shadow-2xl p-8 relative flex flex-col gap-6 backdrop-blur-xl transition-all duration-300 border border-gray-100"
+          style={{ 
+            backgroundColor: data.theme.sheetColor,
+            boxShadow: '0 20px 60px -15px rgba(0, 0, 0, 0.15)'
+          }}
+        >
+          {/* Decorations */}
+          <Deco.Sun />
+
+          {/* Header */}
+          <div className="text-center border-b-2 pb-6 mb-2 relative z-10" style={{ borderColor: data.theme.borderColor }}>
+            {isEditing ? (
+              <div className="flex flex-col gap-3">
+                <div className="bg-blue-50 p-4 rounded-lg border border-dashed border-blue-200">
+                  <label className="block text-sm font-bold text-blue-700 mb-1 flex items-center gap-2"><Icons.Image /> ลิงก์รูปโลโก้ (Logo URL):</label>
+                  <input 
+                    value={data.logoUrl || ""} 
+                    onChange={(e) => handleFieldChange('logoUrl', e.target.value)}
+                    className="w-full p-2 border rounded bg-white text-sm"
+                    placeholder="วาง URL รูปภาพที่นี่ (เช่น https://.../logo.png)"
+                  />
+                  <p className="text-xs text-blue-500 mt-1">*หากใส่ลิงก์รูปภาพ ชื่อบริษัทที่เป็นตัวหนังสือจะถูกซ่อน</p>
+                </div>
+                 <input 
+                  value={data.companyName} 
+                  onChange={(e) => handleFieldChange('companyName', e.target.value)}
+                  className="text-4xl md:text-5xl font-extrabold text-center border rounded p-2 bg-white/50 mt-2"
+                  style={{ color: data.theme.primaryText }}
+                  placeholder="ชื่อบริษัท (จะแสดงถ้าไม่มีโลโก้)"
+                />
+                <input 
+                  value={data.subTitle} 
+                  onChange={(e) => handleFieldChange('subTitle', e.target.value)}
+                  className="text-xl md:text-2xl font-semibold text-center border rounded p-2 bg-white/50"
+                  style={{ color: data.theme.secondaryText }}
+                  placeholder="หัวข้อรอง"
+                />
+              </div>
+            ) : (
+              <>
+                {data.logoUrl ? (
+                  <div className="flex justify-center mb-4">
+                    <img src={data.logoUrl} alt="Logo" className="max-h-32 object-contain drop-shadow-sm" onError={(e) => e.target.style.display = 'none'} />
+                  </div>
+                ) : (
+                  <h1 className="text-4xl md:text-5xl font-extrabold leading-tight tracking-tight mb-2" style={{ color: data.theme.primaryText }}>
+                    {data.companyName}
+                  </h1>
+                )}
+                <p className="mt-1 text-xl md:text-2xl font-semibold opacity-90" style={{ color: data.theme.secondaryText }}>
+                  {data.subTitle}
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Categories */}
+          <div className="space-y-6 relative z-10">
+            {data.categories.map((cat, catIndex) => (
+              <div key={cat.id}>
+                {/* Category Header (Solid Color Bar) */}
+                <div 
+                  className="py-3 px-5 rounded-lg text-xl md:text-2xl font-bold mb-0 flex flex-col justify-center relative group shadow-md transition-all duration-300"
+                  style={{ 
+                    backgroundColor: cat.headerBg, 
+                    // No direct color here, managed inside
+                  }}
+                >
+                  {/* Category Color Controls (Edit Mode Only) */}
+                  {isEditing && (
+                    <div className="flex gap-4 mb-2 bg-white p-2 rounded shadow-lg border absolute -top-12 right-0 z-20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-700">พื้นหลัง:</span>
+                        <input type="color" value={cat.headerBg} onChange={(e) => updateCategory(catIndex, 'headerBg', e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 p-0" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-700">ตัวหนังสือ:</span>
+                        <input type="color" value={cat.headerText} onChange={(e) => updateCategory(catIndex, 'headerText', e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0 p-0" />
+                      </div>
+                      <button 
+                        onClick={() => updateCategory(catIndex, 'isGradient', !cat.isGradient)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold ${cat.isGradient ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : 'bg-gray-100 text-gray-500'}`}
+                      >
+                        <Icons.Sparkles /> {cat.isGradient ? 'Effect ON' : 'Effect OFF'}
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 w-full">
+                    {isEditing ? (
+                      <div className="flex items-center gap-2 w-full">
+                        <input 
+                          value={cat.emoji}
+                          onChange={(e) => updateCategory(catIndex, 'emoji', e.target.value)}
+                          className="w-10 text-center bg-white/20 border-none rounded p-1 text-inherit placeholder-white/50"
+                          placeholder="Icon"
+                        />
+                        <input 
+                          value={cat.name}
+                          onChange={(e) => updateCategory(catIndex, 'name', e.target.value)}
+                          className="flex-grow bg-white/20 border-none rounded p-1 text-inherit placeholder-white/50 font-bold"
+                          placeholder="ชื่อหมวดหมู่"
+                        />
+                        <button onClick={() => removeCategory(catIndex)} className="p-2 bg-white/20 text-white rounded hover:bg-red-500/80 transition-colors"><Icons.Trash /></button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-2xl filter drop-shadow-md">{cat.emoji}</span>
+                        <span 
+                          className="tracking-wide text-shadow-sm"
+                          style={cat.isGradient ? {
+                            background: "linear-gradient(to right, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)",
+                            WebkitBackgroundClip: "text",
+                            WebkitTextFillColor: "transparent",
+                            textShadow: "0px 1px 2px rgba(0,0,0,0.3)" // Shadow helps pop
+                          } : {
+                            color: cat.headerText
+                          }}
+                        >
+                          {cat.name}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto bg-white border-x border-b rounded-b-lg mb-2 shadow-sm" style={{ borderColor: data.theme.borderColor }}>
+                  <table className="w-full min-w-[600px] border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b" style={{ borderColor: data.theme.borderColor }}>
+                        <th className="text-left py-3 px-4 font-bold text-lg w-[28%] uppercase text-gray-600">Series</th>
+                        <th className="text-left py-3 px-2 font-bold text-lg w-[37%] uppercase text-gray-600">Detail</th>
+                        <th className="text-left py-3 px-2 font-bold text-lg w-[20%] uppercase text-gray-600 pl-4">Code</th>
+                        <th className="text-right py-3 px-4 font-bold text-lg w-[15%] uppercase text-gray-600">Price</th>
+                        {isEditing && <th className="w-[5%]"></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cat.items.map((item, itemIndex) => (
+                        <tr key={item.id} className="border-b last:border-0 hover:bg-gray-50 transition-colors" style={{ borderColor: data.theme.borderColor }}>
+                          {/* Series */}
+                          <td className="py-3 px-4 align-middle">
+                            {isEditing ? (
+                              <input 
+                                value={item.series} 
+                                onChange={(e) => updateItem(catIndex, itemIndex, 'series', e.target.value)}
+                                className="w-full p-1 border rounded bg-white text-lg font-extrabold text-black"
+                              />
+                            ) : (
+                              <span className="text-xl md:text-2xl font-extrabold tracking-tight" style={{ color: data.theme.primaryText }}>{item.series}</span>
+                            )}
+                          </td>
+
+                          {/* Detail */}
+                          <td className="py-3 px-2 align-middle">
+                            {isEditing ? (
+                              <input 
+                                value={item.detail} 
+                                onChange={(e) => updateItem(catIndex, itemIndex, 'detail', e.target.value)}
+                                className="w-full p-1 border rounded bg-white text-base text-black"
+                              />
+                            ) : (
+                              <span className="text-lg md:text-xl font-medium" style={{ color: data.theme.secondaryText }}>{item.detail}</span>
+                            )}
+                          </td>
+
+                          {/* Code */}
+                          <td className="py-3 px-2 align-middle text-left pl-4">
+                            {isEditing ? (
+                              <input 
+                                value={item.code} 
+                                onChange={(e) => updateItem(catIndex, itemIndex, 'code', e.target.value)}
+                                className="w-full p-1 border rounded bg-white text-left font-bold text-black"
+                              />
+                            ) : (
+                              <span className="font-bold text-lg whitespace-nowrap font-mono" style={{ color: data.theme.primaryText }}>
+                                {item.code}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Price */}
+                          <td className="py-3 px-4 align-middle text-right">
+                            {isEditing ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <input 
+                                  value={item.price} 
+                                  onChange={(e) => updateItem(catIndex, itemIndex, 'price', e.target.value)}
+                                  className="w-24 p-1 border rounded bg-white text-right font-black text-xl text-red-600"
+                                />
+                                <input 
+                                  value={item.unit !== undefined ? item.unit : "/หลา"} 
+                                  onChange={(e) => updateItem(catIndex, itemIndex, 'unit', e.target.value)}
+                                  className="w-12 p-1 border rounded bg-white text-sm text-gray-500"
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex items-baseline justify-end gap-1">
+                                <span className="text-2xl md:text-3xl font-black tracking-tight" style={{ color: data.theme.priceColor }}>{item.price}</span>
+                                <span className="text-sm md:text-base font-semibold opacity-70" style={{ color: data.theme.secondaryText }}>{item.unit || "/หลา"}</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          {isEditing && (
+                            <td className="py-3 px-2 text-center">
+                              <button onClick={() => removeItem(catIndex, itemIndex)} className="text-red-400 hover:text-red-600 p-1"><Icons.X /></button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {isEditing && (
+                    <button onClick={() => addItem(catIndex)} className="m-2 w-[calc(100%-16px)] py-2 border-2 border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 rounded-lg flex items-center justify-center gap-2 font-semibold">
+                      <Icons.Plus /> เพิ่มสินค้าในหมวดนี้
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {isEditing && (
+            <button onClick={addCategory} className="py-4 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl flex items-center justify-center gap-2 font-bold text-lg border-2 border-gray-200">
+              <Icons.Plus /> เพิ่มหมวดหมู่ใหม่
+            </button>
+          )}
+
+          {/* Footer */}
+          <div className="border-t pt-4 mt-2 text-center text-lg font-semibold opacity-80" style={{ borderColor: data.theme.borderColor, color: data.theme.secondaryText }}>
+            {isEditing ? (
+              <textarea 
+                value={data.footerText} 
+                onChange={(e) => handleFieldChange('footerText', e.target.value)}
+                className="w-full p-2 border rounded text-center bg-white/50 text-black"
+                rows={2}
+              />
+            ) : (
+              data.footerText
+            )}
+          </div>
+
+        </div>
+      </div>
+      
+    </div>
+  );
+}
