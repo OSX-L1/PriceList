@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sunny 1988 Price List (Offline Mode)</title>
+    <title>Sunny 1988 Price List (Online)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -29,7 +29,7 @@
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
-        // Import Firebase (Still included in case you want to enable it later)
+        // Import Firebase
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { 
             getAuth, 
@@ -71,11 +71,15 @@
 
         // --- Configuration Handling ---
         const getFirebaseConfig = () => {
-            // Placeholder config (Safe to leave as is for offline mode)
+            // ✅ ใช้ Config จริงของคุณแล้ว
             return {
-                apiKey: "YOUR_API_KEY_HERE",
-                authDomain: "placeholder",
-                projectId: "placeholder"
+                apiKey: "AIzaSyAEq0wbzfD97wcSghgEV2Hp46rVpUk7XUg",
+                authDomain: "pricelist-8f142.firebaseapp.com",
+                projectId: "pricelist-8f142",
+                storageBucket: "pricelist-8f142.firebasestorage.app",
+                messagingSenderId: "493103277910",
+                appId: "1:493103277910:web:50f076ef3a43de0f16d8f7",
+                measurementId: "G-1KLYD7V1LX"
             };
         };
 
@@ -369,10 +373,10 @@
                 >
                     <Deco.Pattern />
 
-                    {/* Offline Indicator */}
+                    {/* Offline/Config Indicator */}
                     {isDummyConfig && (
-                        <div className="fixed bottom-2 left-2 z-50 bg-black/50 text-white text-xs px-2 py-1 rounded pointer-events-none">
-                            Offline Mode (Saved to Browser)
+                        <div className="fixed bottom-2 left-2 z-50 bg-yellow-600 text-white text-xs px-3 py-2 rounded shadow-lg">
+                            ⚠️ โหมดออฟไลน์: แก้ไขโค้ดบรรทัดที่ 85 เพื่อเชื่อมต่อออนไลน์
                         </div>
                     )}
 
